@@ -1102,7 +1102,7 @@ def view_dept_manager():
         st.dataframe(gap_df, use_container_width=True, hide_index=True)
 
         # 标注短板
-        weakest = gap_df[gap_df["状态"] == "落后"]
+        weakest = gap_df[gap_df["状态"] == "落后"] if "状态" in gap_df.columns else gap_df.iloc[0:0]
         if not weakest.empty:
             skills_str = "、".join(weakest["能力维度"].tolist())
             st.warning(f"当前落后全司均值的维度：{skills_str}，建议优先配置对应实训场景。")
