@@ -1409,19 +1409,133 @@ def view_super_admin():
     st.markdown('<div class="page-title">系统超管端</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">部门架构  ·  权限分配  ·  资源与模型监控</div>', unsafe_allow_html=True)
 
-    tab_org, tab_monitor = st.tabs(["部门架构与权限分配", "系统资源与大模型监控"])
+    from utils.db import db_create_user, db_delete_user
+    DEPT_LIST = ["HR部门", "销售部门", "技术部门", "客服部门", "财务部门", "运营部门", "管理层", "其他"]
+    ROLES      = ["learner", "manager", "admin"]
+    ROLE_LABELS = {"learner": "学员", "manager": "管理者", "admin": "超级管理员"}
+    current_user = st.session_state.user
 
-    # ── Tab1: 部门架构与权限分配 ──────────────────────────────────
+    tab_users, tab_org, tab_monitor = st.tabs(["用户管理", "部门架构与权限分配", "系统资源与大模型监控"])
+
+    # ── Tab1: 用户管理 ────────────────────────────────────────────
+    with tab_users:
+        all_users = db_get_all_users()
+        sub_list, sub_create = st.tabs(["用户列表", "新增用户"])
+
+        with sub_list:
+            search = st.text_input("搜索用户名 / 姓名 / 部门", placeholder="输入关键词筛选", key="sa_search")
+            filtered = all_users
+            if search:
+                kw = search.lower()
+                filtered = [u for u in all_users if
+                            kw in u["username"].lower() or
+                            kw in u["name"].lower() or
+                            kw in u["department"].lower()]
+            st.caption(f"共 {len(filtered)} 名用户")
+            st.divider()
+
+            for u in filtered:
+                is_self = (u["username"] == current_user["username"])
+                col_info, col_edit, col_del = st.columns([5, 1, 1])
+                with col_info:
+                    st.markdown(
+                        f"**{u['name']}** &nbsp; `{u['username']}` &nbsp; "
+                        f"{u['department']} &nbsp; *{ROLE_LABELS.get(u['role'], u['role'])}*"
+                    )
+                    st.caption(f"创建时间：{u['created_at']}")
+
+                edit_key = f"sa_edit_open_{u['username']}"
+                if edit_key not in st.session_state:
+                    st.session_state[edit_key] = False
+                if col_edit.button("编辑", key=f"sa_btn_edit_{u['username']}"):
+                    st.session_state[edit_key] = not st.session_state[edit_key]
+
+                if is_self:
+                    col_del.button("删除", key=f"sa_btn_del_{u['username']}", disabled=True, help="不能删除当前登录账号")
+                else:
+                    if col_del.button("删除", key=f"sa_btn_del_{u['username']}", type="secondary"):
+                        db_delete_user(u["username"])
+                        st.success(f"已删除用户 {u['name']}（{u['username']}）")
+                        st.rerun()
+
+                if st.session_state[edit_key]:
+                    with st.container():
+                        st.markdown("---")
+                        with st.form(f"sa_edit_form_{u['username']}"):
+                            st.markdown(f"**编辑用户：{u['username']}**")
+                            ec1, ec2 = st.columns(2)
+                            new_name = ec1.text_input("姓名", value=u["name"])
+                            new_dept = ec2.selectbox(
+                                "部门", DEPT_LIST,
+                                index=DEPT_LIST.index(u["department"]) if u["department"] in DEPT_LIST else 0,
+                            )
+                            er1, er2 = st.columns(2)
+                            new_role = er1.selectbox(
+                                "角色", ROLES, format_func=lambda x: ROLE_LABELS[x],
+                                index=ROLES.index(u["role"]) if u["role"] in ROLES else 0,
+                                disabled=is_self,
+                            )
+                            new_pwd = er2.text_input("新密码（留空则不修改）", type="password", placeholder="留空不修改")
+                            save_btn = st.form_submit_button("保存修改", type="primary")
+                        if save_btn:
+                            if not new_name.strip():
+                                st.error("姓名不能为空")
+                            else:
+                                db_update_user(u["username"], new_name.strip(), new_dept, new_role,
+                                               new_pwd.strip() if new_pwd.strip() else None)
+                                st.success(f"用户 {u['username']} 信息已更新")
+                                st.session_state[edit_key] = False
+                                if is_self:
+                                    st.session_state.user = {**st.session_state.user,
+                                                             "name": new_name.strip(),
+                                                             "department": new_dept,
+                                                             "role": new_role}
+                                st.rerun()
+                st.divider()
+
+        with sub_create:
+            with st.form("sa_create_user_form", clear_on_submit=True):
+                st.markdown("**填写新用户信息**")
+                nc1, nc2 = st.columns(2)
+                new_username = nc1.text_input("用户名 *", placeholder="仅限字母、数字、下划线")
+                new_uname    = nc2.text_input("姓名 *",   placeholder="真实姓名")
+                nd1, nd2 = st.columns(2)
+                new_dept_c = nd1.selectbox("部门 *", DEPT_LIST, key="sa_create_dept")
+                new_role_c = nd2.selectbox("角色 *", ROLES, format_func=lambda x: ROLE_LABELS[x], key="sa_create_role")
+                np1, np2 = st.columns(2)
+                new_pwd  = np1.text_input("密码 *", type="password", placeholder="至少6位")
+                new_pwd2 = np2.text_input("确认密码 *", type="password", placeholder="再次输入密码")
+                submitted = st.form_submit_button("创建用户", type="primary", use_container_width=True)
+            if submitted:
+                errs = []
+                if not new_username.strip(): errs.append("用户名不能为空")
+                elif not new_username.strip().replace("_","").isalnum(): errs.append("用户名只能包含字母、数字和下划线")
+                if not new_uname.strip(): errs.append("姓名不能为空")
+                if not new_pwd: errs.append("密码不能为空")
+                elif len(new_pwd) < 6: errs.append("密码至少6位")
+                elif new_pwd != new_pwd2: errs.append("两次密码输入不一致")
+                if errs:
+                    for e in errs: st.error(e)
+                else:
+                    try:
+                        db_create_user(new_username.strip(), new_pwd, new_uname.strip(), new_dept_c, new_role_c)
+                        st.success(f"用户「{new_uname}」（{new_username}）创建成功！")
+                    except Exception as e:
+                        if "UNIQUE constraint" in str(e):
+                            st.error(f"用户名 `{new_username}` 已存在，请换一个")
+                        else:
+                            st.error(f"创建失败：{e}")
+
+    # ── Tab2: 部门架构与权限分配 ──────────────────────────────────
     with tab_org:
+        all_users = db_get_all_users()
         st.subheader("部门主管账号分配")
         mgr_df = get_dept_manager_table()
         st.dataframe(mgr_df, use_container_width=True, hide_index=True)
 
         st.divider()
         st.subheader("变更部门主管")
-        all_users = db_get_all_users()
         user_options = {f"{u['name']} ({u['username']})": u["username"] for u in all_users}
-
         oc1, oc2, oc3 = st.columns([2, 2, 1])
         assign_dept = oc1.selectbox("目标部门", DEPARTMENTS, key="sa_assign_dept")
         assign_user_label = oc2.selectbox("指派主管账号", list(user_options.keys()), key="sa_assign_user")
@@ -1430,19 +1544,15 @@ def view_super_admin():
             target_username = user_options[assign_user_label]
             db_update_user(target_username,
                            name=next(u["name"] for u in all_users if u["username"] == target_username),
-                           department=assign_dept,
-                           role="manager")
+                           department=assign_dept, role="manager")
             st.success(f"已将 {assign_user_label} 设为「{assign_dept}」主管，部门已同步更新。")
             st.rerun()
 
         st.divider()
         st.subheader("全体用户账号列表")
         users_df = pd.DataFrame([{
-            "用户名":   u["username"],
-            "姓名":     u["name"],
-            "部门":     u["department"],
-            "角色":     u["role"],
-            "创建时间": u["created_at"],
+            "用户名": u["username"], "姓名": u["name"],
+            "部门": u["department"], "角色": u["role"], "创建时间": u["created_at"],
         } for u in all_users])
         st.dataframe(users_df, use_container_width=True, hide_index=True)
 
