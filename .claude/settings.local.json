@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /Users/wuzihan/Desktop/aihr/start.sh)",
+      "Bash(ls /Users/wuzihan/Desktop/aihr/*.py /Users/wuzihan/Desktop/aihr/*.sh /Users/wuzihan/Desktop/aihr/*.txt /Users/wuzihan/Desktop/aihr/agents/*.py /Users/wuzihan/Desktop/aihr/utils/*.py /Users/wuzihan/Desktop/aihr/data/*.json)",
+      "Bash(.venv/bin/python -c ':*)",
+      "Bash(sed -i '' 's/-> dict | None:/-> Optional[Dict]:/g' /Users/wuzihan/Desktop/aihr/utils/profile_manager.py)",
+      "Bash(sed -i '' 's/-> list\\\\[dict\\\\]:/-> List[Dict]:/g' /Users/wuzihan/Desktop/aihr/utils/profile_manager.py)",
+      "Bash(.venv/bin/streamlit run:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)",
+      "Bash(pkill -f \"streamlit run\")",
+      "Bash(.venv/bin/pip install:*)",
+      "Bash(.venv/bin/python -c \"import sqlite3; print\\('sqlite3 OK'\\)\")"
+    ]
+  }
+}
