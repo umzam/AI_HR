@@ -1188,13 +1188,14 @@ def view_dept_manager():
         st.dataframe(detail_df, use_container_width=True, hide_index=True)
 
         # 梯队分布
-        st.divider()
-        st.subheader("梯队分布")
-        label_counts = detail_df["状态"].value_counts().reset_index()
-        label_counts.columns = ["状态", "人数"]
-        total = label_counts["人数"].sum()
-        label_counts["占比"] = label_counts["人数"].apply(lambda x: f"{x/total*100:.1f}%")
-        st.dataframe(label_counts, use_container_width=True, hide_index=True)
+        if "状态" in detail_df.columns and not detail_df.empty:
+            st.divider()
+            st.subheader("梯队分布")
+            label_counts = detail_df["状态"].value_counts().reset_index()
+            label_counts.columns = ["状态", "人数"]
+            total = label_counts["人数"].sum()
+            label_counts["占比"] = label_counts["人数"].apply(lambda x: f"{x/total*100:.1f}%")
+            st.dataframe(label_counts, use_container_width=True, hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════════════
