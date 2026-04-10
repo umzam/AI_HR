@@ -1,16 +1,16 @@
 """
-app.py — AI练兵平台主入口（Streamlit 前端）
+app.py — AI 虚拟实训平台主入口（Streamlit 前端）
 
-页面：
-  login         — 登录
-  home          — 首页（能力画像 + 推荐场景）
-  scene_select  — 场景选择（learner 专属，显示本部门所有可用场景）
-  training      — 训练室（多Agent对话 + 教练实时反馈）
-  report        — 当次训练报告
-  scenarios     — 场景管理（manager / admin 创建自定义场景）
-  history       — 历史记录列表
-  history_report— 历史某次训练的完整报告
-  user_mgmt     — 用户管理（admin 专属：增删改查）
+视图路由（侧边栏身份切换）：
+  员工虚拟实训端      — view_employee()
+  普通部门主管端      — view_dept_manager()
+  HR全局培训管理端    — view_hr_admin()
+  系统超管端          — view_super_admin()
+
+全页面路由（训练室不嵌入 Tab，保持全页体验）：
+  training      — page_training()
+  report        — page_report()
+  history_report— page_history_report()
 """
 
 import os
@@ -48,7 +48,7 @@ from utils.db import (
 
 # ── 全局页面配置 ──────────────────────────────────────────────────
 st.set_page_config(
-    page_title="AI练兵平台",
+    page_title="AI 虚拟实训平台",
     page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
@@ -74,17 +74,18 @@ st.markdown("""
 # ── Session State 初始化 ──────────────────────────────────────────
 def init_session():
     defaults = {
-        "authenticated": False,
-        "user": None,
-        "page": "login",
-        "training_session": None,
-        "chat_history": [],
-        "coach_feedbacks": [],
-        "current_scenario": None,
-        "training_finished": False,
-        "training_report": None,
-        "input_mode": "text",
-        "viewing_history_report": None,   # 历史报告查看时存放的 session record
+        "authenticated":          False,
+        "user":                   None,
+        "page":                   "login",
+        "platform_view":          "员工虚拟实训端",
+        "training_session":       None,
+        "chat_history":           [],
+        "coach_feedbacks":        [],
+        "current_scenario":       None,
+        "training_finished":      False,
+        "training_report":        None,
+        "input_mode":             "text",
+        "viewing_history_report": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -166,34 +167,34 @@ def render_sidebar():
         return
     user = st.session_state.user
     with st.sidebar:
-        st.markdown(f"## {user['name']}")
+        # ── 顶部：身份视图切换（核心 RBAC 入口）────────────────
+        VIEWS = [
+            "员工虚拟实训端",
+            "普通部门主管端",
+            "HR全局培训管理端",
+            "系统超管端",
+        ]
+        st.selectbox(
+            "当前视图",
+            VIEWS,
+            key="platform_view",
+            label_visibility="collapsed",
+        )
+        st.divider()
+
+        # ── 登录用户信息 ─────────────────────────────────────────
+        st.markdown(f"**{user['name']}**")
         st.caption(f"{user['department']}  ·  {user['role'].upper()}")
         st.divider()
 
-        # 导航菜单：根据角色显示不同页面
-        pages = [("首页", "home")]
-        if user["role"] == "learner":
-            pages.append(("场景选择", "scene_select"))
-        pages.append(("训练历史", "history"))
-        if user["role"] in ("manager", "admin"):
-            pages.append(("场景管理", "scenarios"))
-        if user["role"] == "admin":
-            pages.append(("用户管理", "user_mgmt"))
-
-        for label, pg in pages:
-            if st.button(label, use_container_width=True, key=f"nav_{pg}"):
-                nav_to(pg)
-
-        st.divider()
-
-        # 当前训练状态
+        # ── 实训进行中快捷入口 ───────────────────────────────────
         if st.session_state.training_session and not st.session_state.training_finished:
             sc = st.session_state.current_scenario
             if sc:
-                st.caption("训练进行中")
+                st.caption("实训进行中")
                 st.write(f"**{sc['name']}**")
                 st.write(f"已对话 {st.session_state.training_session.round_count} 轮")
-                if st.button("进入训练室", use_container_width=True):
+                if st.button("返回实训室", use_container_width=True):
                     nav_to("training")
             st.divider()
 
@@ -210,8 +211,8 @@ def render_sidebar():
 def page_login():
     _, col_m, _ = st.columns([1, 2, 1])
     with col_m:
-        st.markdown("## AI 练兵平台")
-        st.markdown("##### 多部门 · 多Agent · 实时教练")
+        st.markdown("## AI 虚拟实训平台")
+        st.markdown("##### 多部门 · 多 Agent · 实时教练")
         st.divider()
 
         with st.form("login_form"):
@@ -545,44 +546,121 @@ def page_report():
 # 页面：场景管理（manager / admin）
 # ══════════════════════════════════════════════════════════════════
 def page_scenarios():
+    from agents.scenario_architect import generate_scenario, JOBS
+
     user = st.session_state.user
     if user["role"] not in ("manager", "admin"):
         st.warning("仅部门管理者和管理员可访问此页面")
         return
 
     st.markdown('<div class="page-title">场景管理</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">创建、管理训练场景 — 填写 3 个要素，平台自动生成 Agent 配置</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">创建、管理训练场景 — 手动填写或 AI 一键生成场景方案</div>', unsafe_allow_html=True)
 
     tab_create, tab_existing = st.tabs(["创建新场景", "已有场景"])
 
-    with tab_create:
-        st.info("只需填写 3 个要素，平台自动生成角色 Agent、教练 Agent 的完整配置。")
-        with st.form("create_scenario_form"):
-            c1, c2 = st.columns(2)
-            scene_name = c1.text_input("场景名称 *", placeholder="例：客服投诉处理")
-            scene_dept = c2.selectbox(
-                "所属部门 *",
-                ["HR部门", "销售部门", "技术部门", "客服部门", "财务部门", "运营部门", "其他"],
-            )
-            scene_desc = st.text_area(
-                "① 场景描述 *",
-                placeholder="描述训练场景的背景和目标",
-                height=100,
-            )
-            role_background = st.text_area(
-                "② 角色背景、需求和性格 *",
-                placeholder="描述角色扮演者的设定、核心诉求、性格特征",
-                height=150,
-            )
-            eval_rules = st.text_input(
-                "③ 能力评估维度 *",
-                placeholder="用中文逗号分隔，例如：情绪安抚，问题解决，服务规范",
-            )
-            submitted = st.form_submit_button("生成场景配置并保存", type="primary", use_container_width=True)
+    # ── session_state 中的表单字段 key（保证 AI 填充后 widget 自动更新）
+    SK = {
+        "dept":  "sc_form_dept",
+        "name":  "sc_form_name",
+        "desc":  "sc_form_desc",
+        "role":  "sc_form_role",
+        "rules": "sc_form_rules",
+    }
+    # 首次进入初始化
+    for k, sk in SK.items():
+        if sk not in st.session_state:
+            st.session_state[sk] = "" if k != "dept" else "HR部门"
 
-        if submitted:
+    DEPARTMENTS = ["HR部门", "销售部门", "技术部门", "客服部门", "财务部门", "运营部门", "其他"]
+
+    with tab_create:
+        # ── 第一行：所属部门 + 岗位 + AI生成按钮 ──────────────────
+        col_dept, col_job, col_btn = st.columns([2, 2, 1])
+
+        with col_dept:
+            dept_idx = DEPARTMENTS.index(st.session_state[SK["dept"]]) \
+                       if st.session_state[SK["dept"]] in DEPARTMENTS else 0
+            st.selectbox(
+                "所属部门 *",
+                DEPARTMENTS,
+                index=dept_idx,
+                key=SK["dept"],
+            )
+
+        with col_job:
+            # 岗位选择不存入场景配置，仅作为 AI 生成的输入参数
+            if "sc_form_job" not in st.session_state:
+                st.session_state["sc_form_job"] = JOBS[0]
+            st.selectbox("选择岗位（用于 AI 生成）", JOBS, key="sc_form_job")
+
+        with col_btn:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)  # 对齐
+            ai_clicked = st.button("AI 一键生成方案", type="primary", use_container_width=True)
+
+        # ── AI 生成逻辑 ────────────────────────────────────────────
+        if ai_clicked:
+            job   = st.session_state["sc_form_job"]
+            dept  = st.session_state[SK["dept"]]
+            with st.spinner(f"Scenario Architect Agent 正在为「{job}」设计场景方案..."):
+                result = generate_scenario(job, dept)
+
+            if result.get("error"):
+                st.warning(result["error"])
+
+            if result.get("_is_mock"):
+                st.info("Mock 演示模式 — 已填入预设示例，配置 ARK_API_KEY 后重启即可使用真实 AI 生成。")
+
+            # 写入 session_state，触发 widget 自动更新
+            if result.get("name"):
+                st.session_state[SK["name"]]  = result["name"]
+            if result.get("description"):
+                st.session_state[SK["desc"]]  = result["description"]
+            if result.get("role_background"):
+                st.session_state[SK["role"]]  = result["role_background"]
+            if result.get("eval_rules"):
+                st.session_state[SK["rules"]] = result["eval_rules"]
+
+            st.success("AI 已生成场景方案，可在下方直接编辑后保存。")
+            st.rerun()
+
+        st.divider()
+
+        # ── 表单字段（绑定 session_state key，AI 填充后自动显示）──
+        st.text_input(
+            "场景名称 *",
+            placeholder="例：客服投诉处理",
+            key=SK["name"],
+        )
+        st.text_area(
+            "① 场景描述 *",
+            placeholder="描述训练场景的背景和目标（可由 AI 生成后手动修改）",
+            height=110,
+            key=SK["desc"],
+        )
+        st.text_area(
+            "② 角色背景、需求和性格 *",
+            placeholder="描述角色扮演者的设定、核心诉求、性格特征（可由 AI 生成后手动修改）",
+            height=160,
+            key=SK["role"],
+        )
+        st.text_input(
+            "③ 能力评估维度 *",
+            placeholder="用中文逗号分隔，例如：情绪安抚，问题解决，服务规范",
+            key=SK["rules"],
+        )
+
+        st.markdown("")
+        save_clicked = st.button("生成 Agent 配置并保存场景", type="primary", use_container_width=True)
+
+        if save_clicked:
+            scene_name      = st.session_state[SK["name"]].strip()
+            scene_dept      = st.session_state[SK["dept"]]
+            scene_desc      = st.session_state[SK["desc"]].strip()
+            role_background = st.session_state[SK["role"]].strip()
+            eval_rules      = st.session_state[SK["rules"]].strip()
+
             if not all([scene_name, scene_desc, role_background, eval_rules]):
-                st.error("请填写所有必填字段")
+                st.error("请填写所有必填字段（场景名称、场景描述、角色背景、评估维度均不能为空）")
             else:
                 scene_id = f"custom_{uuid.uuid4().hex[:8]}"
                 try:
@@ -593,11 +671,15 @@ def page_scenarios():
                         evaluation_rules_str=eval_rules,
                     )
                     save_custom_scenario(cfg)
+                    # 清空表单
+                    for sk in SK.values():
+                        st.session_state[sk] = "" if sk != SK["dept"] else "HR部门"
                     st.success(f"场景「{scene_name}」创建成功，Agent 配置已自动生成。")
                     with st.expander("查看角色 Agent 提示词"):
                         st.code(cfg["role_system_prompt"], language="markdown")
                     with st.expander("查看教练 Agent 提示词"):
                         st.code(cfg["coach_system_prompt"], language="markdown")
+                    st.rerun()
                 except Exception as e:
                     st.error(f"场景创建失败: {e}")
 
@@ -902,6 +984,508 @@ def page_user_mgmt():
 
 
 # ══════════════════════════════════════════════════════════════════
+# 视图一：员工虚拟实训端
+# ══════════════════════════════════════════════════════════════════
+def view_employee():
+    import pandas as pd
+    user    = st.session_state.user
+    profile = get_user_profile(user["username"])
+    caps    = profile.get("capabilities", {}) if profile else {}
+    sessions = profile.get("training_sessions", []) if profile else []
+
+    st.markdown('<div class="page-title">个人虚拟实训中心</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-subtitle">{user["name"]}  ·  {user["department"]}</div>', unsafe_allow_html=True)
+
+    tab_hall, tab_profile = st.tabs(["个人实训大厅", "实训能力画像"])
+
+    # ── Tab1: 个人实训大厅 ────────────────────────────────────────
+    with tab_hall:
+        scenarios = get_recommended_scenarios(user)
+        if not scenarios:
+            st.info("暂无推荐实训场景，请联系管理员创建。")
+        else:
+            for i in range(0, len(scenarios), 3):
+                cols = st.columns(3)
+                for j, sc in enumerate(scenarios[i:i+3]):
+                    with cols[j]:
+                        rule_scores = "  /  ".join(
+                            f"{r}: {caps.get(r, '—')}" for r in sc["evaluation_rules"]
+                        )
+                        st.markdown(f"""
+<div class="scenario-card">
+    <div style="font-weight:700;font-size:1.05em;margin-bottom:4px">{sc['name']}</div>
+    <div style="color:#94A3B8;font-size:0.82em">{sc['department']}  ·  {sc.get('difficulty','中级')}  ·  {sc['estimated_time']}</div>
+    <div style="color:#64748B;font-size:0.78em;margin-top:6px">{sc['description'][:55]}...</div>
+    <div style="font-size:0.76em;color:#818CF8;margin-top:8px">{rule_scores}</div>
+</div>""", unsafe_allow_html=True)
+                        if st.button("进入实训", key=f"emp_start_{sc['id']}", use_container_width=True, type="primary"):
+                            start_training(sc)
+                            st.rerun()
+
+        # 最近一次复盘摘要
+        if sessions:
+            st.divider()
+            last = sessions[-1]
+            st.markdown("**最近一次实训摘要**")
+            mc1, mc2, mc3 = st.columns(3)
+            mc1.metric("场景", last.get("scenario_name", "—"))
+            mc2.metric("综合得分", f"{last.get('overall_score','—')}/10")
+            mc3.metric("日期", last.get("date", "—"))
+            if last.get("report_md") and st.button("查看完整报告", key="emp_last_report"):
+                st.session_state.viewing_history_report = last
+                nav_to("history_report")
+                st.rerun()
+
+    # ── Tab2: 实训能力画像 ────────────────────────────────────────
+    with tab_profile:
+        if not caps:
+            st.info("完成第一次实训后，能力画像将在此显示。")
+            return
+
+        col_r, col_s = st.columns([3, 2])
+        with col_r:
+            st.subheader("能力雷达图")
+            fig = create_radar_chart(caps)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+        with col_s:
+            st.subheader("各维度得分")
+            for skill, score in sorted(caps.items(), key=lambda x: -x[1]):
+                st.write(f"**{skill}**")
+                st.progress(score / 10, text=f"{score}/10")
+
+        if sessions:
+            st.divider()
+            st.subheader("历史实训记录")
+            rows = []
+            for s in reversed(sessions):
+                rows.append({
+                    "日期":     s["date"],
+                    "场景":     s.get("scenario_name", "—"),
+                    "综合得分": f"{s.get('overall_score','—')}/10",
+                    "轮次":     s.get("round_count", "—"),
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 视图二：普通部门主管端
+# ══════════════════════════════════════════════════════════════════
+def view_dept_manager():
+    from utils.mock_data import (
+        get_dept_stats, get_dept_capability_gap,
+        get_dept_user_detail, DEPT_SKILLS,
+    )
+    from agents.scenario_architect import generate_scenario, JOBS
+
+    user = st.session_state.user
+    dept = user["department"]
+
+    st.markdown('<div class="page-title">部门主管控制台</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="page-subtitle">{dept}  ·  仅显示本部门数据</div>', unsafe_allow_html=True)
+
+    tab_board, tab_scene, tab_data = st.tabs(["部门实训看板", "部门专属场景管理", "部门实训数据"])
+
+    # ── Tab1: 部门实训看板 ────────────────────────────────────────
+    with tab_board:
+        stats = get_dept_stats(dept)
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("部门总人数",   stats.get("total", "—"))
+        m2.metric("已参训人数",   stats.get("completed", "—"))
+        m3.metric("完成率",       stats.get("rate", "—"))
+        m4.metric("平均综合得分", stats.get("avg_score", "—"))
+
+        st.divider()
+        st.subheader("能力维度分析")
+        gap_df = get_dept_capability_gap(dept)
+        st.dataframe(gap_df, use_container_width=True, hide_index=True)
+
+        # 标注短板
+        weakest = gap_df[gap_df["状态"] == "落后"]
+        if not weakest.empty:
+            skills_str = "、".join(weakest["能力维度"].tolist())
+            st.warning(f"当前落后全司均值的维度：{skills_str}，建议优先配置对应实训场景。")
+        else:
+            st.success("本部门各能力维度均高于或持平全司均值。")
+
+    # ── Tab2: 部门专属场景管理 ────────────────────────────────────
+    with tab_scene:
+        SKD = {k: f"dm_sc_{k}" for k in ["dept", "job", "name", "desc", "role", "rules"]}
+        for k, sk in SKD.items():
+            if sk not in st.session_state:
+                st.session_state[sk] = dept if k == "dept" else (JOBS[0] if k == "job" else "")
+
+        DEPARTMENTS_ALL = ["HR部门","销售部门","技术部门","客服部门","财务部门","运营部门","其他"]
+        dept_idx = DEPARTMENTS_ALL.index(dept) if dept in DEPARTMENTS_ALL else 0
+
+        # 顶部：岗位选择 + AI 生成按钮
+        col_job, col_btn = st.columns([3, 1])
+        with col_job:
+            st.selectbox("选择岗位（用于 AI 生成方案）", JOBS, key=SKD["job"])
+        with col_btn:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("AI 生成场景方案", type="primary", use_container_width=True, key="dm_ai_gen"):
+                with st.spinner("Scenario Architect Agent 正在生成..."):
+                    result = generate_scenario(st.session_state[SKD["job"]], dept)
+                if result.get("_is_mock"):
+                    st.info("Mock 演示模式，已填入预设示例。")
+                if result.get("error"):
+                    st.warning(result["error"])
+                for field, key in [("name","name"),("description","desc"),("role_background","role"),("eval_rules","rules")]:
+                    if result.get(field):
+                        st.session_state[SKD[key]] = result[field]
+                st.success("AI 已生成场景方案，可在下方编辑后保存。")
+                st.rerun()
+
+        st.divider()
+        st.text_input("场景名称 *", placeholder="例：销售客户异议处理", key=SKD["name"])
+        st.text_area("场景描述 *", height=100, key=SKD["desc"])
+        st.text_area("角色背景、需求和性格 *", height=140, key=SKD["role"])
+        st.text_input("能力评估维度 *", placeholder="用中文逗号分隔", key=SKD["rules"])
+
+        if st.button("保存场景", type="primary", use_container_width=True, key="dm_save_scene"):
+            name  = st.session_state[SKD["name"]].strip()
+            desc  = st.session_state[SKD["desc"]].strip()
+            role  = st.session_state[SKD["role"]].strip()
+            rules = st.session_state[SKD["rules"]].strip()
+            if not all([name, desc, role, rules]):
+                st.error("请填写所有必填字段")
+            else:
+                import uuid as _uuid
+                cfg = build_custom_scenario_config(
+                    scenario_id=f"custom_{_uuid.uuid4().hex[:8]}",
+                    name=name, department=dept, description=desc,
+                    role_background=role, evaluation_rules_str=rules,
+                )
+                save_custom_scenario(cfg)
+                for k in SKD.values():
+                    st.session_state[k] = ""
+                st.success(f"场景「{name}」已保存，仅本部门可见。")
+                st.rerun()
+
+        # 本部门已有自定义场景
+        dept_custom = [s for s in load_custom_scenarios() if s.get("department") == dept]
+        if dept_custom:
+            st.divider()
+            st.subheader("本部门已有场景")
+            for cs in dept_custom:
+                with st.expander(f"{cs['name']}"):
+                    st.write(cs.get("description", ""))
+                    st.caption("评估维度：" + "、".join(cs["evaluation_rules"]))
+                    ca, cb = st.columns(2)
+                    if ca.button("进入实训", key=f"dm_train_{cs['id']}"):
+                        start_training(cs); st.rerun()
+                    if cb.button("删除", key=f"dm_del_{cs['id']}", type="secondary"):
+                        delete_custom_scenario(cs["id"])
+                        st.success("已删除"); st.rerun()
+
+    # ── Tab3: 部门实训数据 ────────────────────────────────────────
+    with tab_data:
+        st.subheader("部门成员实训进度")
+        st.caption("以下数据为平台模拟数据，接入真实用户后自动同步。")
+        detail_df = get_dept_user_detail(dept)
+        st.dataframe(detail_df, use_container_width=True, hide_index=True)
+
+        # 梯队分布
+        st.divider()
+        st.subheader("梯队分布")
+        label_counts = detail_df["状态"].value_counts().reset_index()
+        label_counts.columns = ["状态", "人数"]
+        total = label_counts["人数"].sum()
+        label_counts["占比"] = label_counts["人数"].apply(lambda x: f"{x/total*100:.1f}%")
+        st.dataframe(label_counts, use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 视图三：HR 全局培训管理端
+# ══════════════════════════════════════════════════════════════════
+def view_hr_admin():
+    import pandas as pd
+    from utils.mock_data import (
+        get_global_stats, get_dept_overview, get_top_scenarios,
+        get_company_capability_gap, get_global_user_table,
+        get_skill_model_config, DEPT_SKILLS, DEPARTMENTS,
+    )
+    from agents.scenario_architect import generate_scenario, JOBS
+
+    st.markdown('<div class="page-title">HR 全局培训管理端</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">全平台实训运营数据  ·  场景下发  ·  能力模型配置</div>', unsafe_allow_html=True)
+
+    tab_kpi, tab_scene, tab_model, tab_query = st.tabs([
+        "全局运营数据看板", "公共与专属场景管理", "能力模型管理", "全局训练数据查询"
+    ])
+
+    # ── Tab1: 全局运营数据看板 ────────────────────────────────────
+    with tab_kpi:
+        gs = get_global_stats()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("平台注册用户",   gs["total_users"])
+        m2.metric("今日活跃实训",   gs["today_active"])
+        m3.metric("累计实训场次",   gs["total_sessions"])
+        m4.metric("平台平均得分",   f"{gs['avg_score']}/10")
+
+        st.divider()
+
+        c_left, c_right = st.columns([3, 2])
+        with c_left:
+            st.subheader("各部门完成率对比")
+            dept_df = get_dept_overview()
+            st.dataframe(dept_df, use_container_width=True, hide_index=True)
+
+        with c_right:
+            st.subheader("热门场景 TOP 5")
+            top_df = get_top_scenarios(5)
+            st.dataframe(top_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+        st.subheader("全公司能力短板跨部门统计")
+        gap_df = get_company_capability_gap()
+        st.dataframe(gap_df, use_container_width=True, hide_index=True)
+        st.caption("'—' 表示该部门未配置此维度  ·  数值越低代表该维度越需重点关注")
+
+    # ── Tab2: 公共与专属场景管理 ──────────────────────────────────
+    with tab_scene:
+        DEPARTMENTS_ALL = ["HR部门","销售部门","技术部门","客服部门","财务部门","运营部门","其他"]
+        SKH = {k: f"hr_sc_{k}" for k in ["scope","dept","job","name","desc","role","rules"]}
+        for k, sk in SKH.items():
+            if sk not in st.session_state:
+                st.session_state[sk] = ("HR专属" if k == "scope" else
+                                         "HR部门" if k == "dept" else
+                                         JOBS[0]   if k == "job" else "")
+
+        # 场景类型切换
+        scope_col, job_col, btn_col = st.columns([2, 2, 1])
+        with scope_col:
+            st.radio(
+                "场景类型",
+                ["HR专属", "全员通用"],
+                key=SKH["scope"],
+                horizontal=True,
+                help="全员通用场景对所有部门可见，HR专属场景仅对HR部门可见",
+            )
+        with job_col:
+            st.selectbox("选择岗位（用于 AI 生成）", JOBS, key=SKH["job"])
+        with btn_col:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("AI 生成方案", type="primary", use_container_width=True, key="hr_ai_gen"):
+                with st.spinner("Scenario Architect Agent 正在生成..."):
+                    result = generate_scenario(st.session_state[SKH["job"]], st.session_state[SKH["dept"]])
+                if result.get("_is_mock"):
+                    st.info("Mock 演示模式，已填入预设示例。")
+                for field, key in [("name","name"),("description","desc"),("role_background","role"),("eval_rules","rules")]:
+                    if result.get(field):
+                        st.session_state[SKH[key]] = result[field]
+                st.success("AI 已生成场景方案，可在下方编辑后保存。")
+                st.rerun()
+
+        st.divider()
+
+        hr_dept = "全员通用" if st.session_state[SKH["scope"]] == "全员通用" else st.session_state[SKH["dept"]]
+        st.text_input("场景名称 *",         key=SKH["name"],  placeholder="例：职场合规行为规范")
+        st.text_area("场景描述 *",  height=100, key=SKH["desc"])
+        st.text_area("角色背景、需求和性格 *", height=130, key=SKH["role"])
+        st.text_input("能力评估维度 *",      key=SKH["rules"], placeholder="用中文逗号分隔")
+
+        if st.button("保存并下发场景", type="primary", use_container_width=True, key="hr_save_scene"):
+            name  = st.session_state[SKH["name"]].strip()
+            desc  = st.session_state[SKH["desc"]].strip()
+            role  = st.session_state[SKH["role"]].strip()
+            rules = st.session_state[SKH["rules"]].strip()
+            if not all([name, desc, role, rules]):
+                st.error("请填写所有必填字段")
+            else:
+                import uuid as _uuid
+                cfg = build_custom_scenario_config(
+                    scenario_id=f"custom_{_uuid.uuid4().hex[:8]}",
+                    name=name, department=hr_dept, description=desc,
+                    role_background=role, evaluation_rules_str=rules,
+                )
+                save_custom_scenario(cfg)
+                for k in SKH.values():
+                    st.session_state[k] = ""
+                scope_label = "全员通用" if st.session_state.get(SKH["scope"]) == "全员通用" else "HR专属"
+                st.success(f"场景「{name}」已保存（{scope_label}），相关部门员工可立即使用。")
+                st.rerun()
+
+        # 已有场景列表
+        st.divider()
+        st.subheader("已有自定义场景")
+        custom_list = load_custom_scenarios()
+        if custom_list:
+            rows = [{"场景名称": c["name"], "所属部门": c["department"],
+                     "评估维度": "、".join(c["evaluation_rules"][:2]) + ("..." if len(c["evaluation_rules"]) > 2 else ""),
+                     "场景ID": c["id"]}
+                    for c in custom_list]
+            scene_df = pd.DataFrame(rows)
+            st.dataframe(scene_df[["场景名称","所属部门","评估维度"]], use_container_width=True, hide_index=True)
+        else:
+            st.info("暂无自定义场景。")
+
+    # ── Tab3: 能力模型管理 ────────────────────────────────────────
+    with tab_model:
+        st.subheader("各部门能力维度与权重配置")
+        st.caption("可直接在表格中修改权重值（各部门权重之和应为 100%），修改后点击「保存配置」生效。")
+
+        skill_df = get_skill_model_config()
+
+        edited = st.data_editor(
+            skill_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "部门":     st.column_config.TextColumn("部门",     disabled=True),
+                "能力维度": st.column_config.TextColumn("能力维度", disabled=True),
+                "权重(%)":  st.column_config.NumberColumn("权重(%)", min_value=0, max_value=100, step=5),
+                "状态":     st.column_config.SelectboxColumn("状态", options=["启用", "停用"]),
+            },
+            key="hr_skill_editor",
+        )
+
+        if st.button("保存配置", type="primary", key="hr_save_model"):
+            # 校验每个部门的权重是否合计 100
+            weight_check = edited.groupby("部门")["权重(%)"].sum()
+            invalid = weight_check[weight_check != 100]
+            if not invalid.empty:
+                for dept_name, total in invalid.items():
+                    st.error(f"「{dept_name}」权重合计为 {total}%，须等于 100%")
+            else:
+                st.success("能力模型配置已保存。（Demo 模式：重启后恢复默认值）")
+
+        st.divider()
+        st.subheader("新增能力维度")
+        nc1, nc2, nc3 = st.columns([2, 2, 1])
+        new_dept_m  = nc1.selectbox("所属部门", DEPARTMENTS, key="hr_new_skill_dept")
+        new_skill_m = nc2.text_input("维度名称", placeholder="例：客户满意度管理", key="hr_new_skill_name")
+        nc3.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        if nc3.button("添加", key="hr_add_skill"):
+            if new_skill_m.strip():
+                st.success(f"已为「{new_dept_m}」添加维度「{new_skill_m}」（Demo 模式：重启后恢复）")
+            else:
+                st.error("维度名称不能为空")
+
+    # ── Tab4: 全局训练数据查询 ────────────────────────────────────
+    with tab_query:
+        st.subheader("全员实训进度总览")
+
+        # 筛选栏
+        fc1, fc2, fc3 = st.columns([2, 2, 2])
+        filter_dept   = fc1.selectbox("筛选部门", ["全部"] + DEPARTMENTS, key="hr_filter_dept")
+        filter_label  = fc2.selectbox("梯队标签", ["全部", "高潜人才", "稳健成长", "成长中", "需重点关注"], key="hr_filter_label")
+        filter_status = fc3.selectbox("参训状态", ["全部", "活跃", "入门", "未开始"], key="hr_filter_status")
+
+        global_df = get_global_user_table()
+        if filter_dept != "全部":
+            global_df = global_df[global_df["部门"] == filter_dept]
+        if filter_label != "全部":
+            global_df = global_df[global_df["梯队标签"] == filter_label]
+        if filter_status != "全部":
+            pass  # 状态信息在 dept_user_detail，全局表未冗余，此处演示筛选框
+
+        st.caption(f"共 {len(global_df)} 条记录")
+        st.dataframe(global_df, use_container_width=True, hide_index=True)
+
+        # 梯队汇总
+        st.divider()
+        st.subheader("全公司梯队分布")
+        tier_df = get_global_user_table()["梯队标签"].value_counts().reset_index()
+        tier_df.columns = ["梯队标签", "人数"]
+        tier_df["占比"] = tier_df["人数"].apply(lambda x: f"{x/len(get_global_user_table())*100:.1f}%")
+        st.dataframe(tier_df, use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 视图四：系统超管端
+# ══════════════════════════════════════════════════════════════════
+def view_super_admin():
+    import pandas as pd
+    from utils.mock_data import (
+        get_dept_manager_table, get_token_stats,
+        get_dept_token_usage, get_api_health, DEPARTMENTS,
+    )
+    from utils.db import db_get_all_users, db_update_user
+
+    st.markdown('<div class="page-title">系统超管端</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">部门架构  ·  权限分配  ·  资源与模型监控</div>', unsafe_allow_html=True)
+
+    tab_org, tab_monitor = st.tabs(["部门架构与权限分配", "系统资源与大模型监控"])
+
+    # ── Tab1: 部门架构与权限分配 ──────────────────────────────────
+    with tab_org:
+        st.subheader("部门主管账号分配")
+        mgr_df = get_dept_manager_table()
+        st.dataframe(mgr_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+        st.subheader("变更部门主管")
+        all_users = db_get_all_users()
+        user_options = {f"{u['name']} ({u['username']})": u["username"] for u in all_users}
+
+        oc1, oc2, oc3 = st.columns([2, 2, 1])
+        assign_dept = oc1.selectbox("目标部门", DEPARTMENTS, key="sa_assign_dept")
+        assign_user_label = oc2.selectbox("指派主管账号", list(user_options.keys()), key="sa_assign_user")
+        oc3.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        if oc3.button("确认指派", type="primary", key="sa_assign_btn"):
+            target_username = user_options[assign_user_label]
+            db_update_user(target_username,
+                           name=next(u["name"] for u in all_users if u["username"] == target_username),
+                           department=assign_dept,
+                           role="manager")
+            st.success(f"已将 {assign_user_label} 设为「{assign_dept}」主管，部门已同步更新。")
+            st.rerun()
+
+        st.divider()
+        st.subheader("全体用户账号列表")
+        users_df = pd.DataFrame([{
+            "用户名":   u["username"],
+            "姓名":     u["name"],
+            "部门":     u["department"],
+            "角色":     u["role"],
+            "创建时间": u["created_at"],
+        } for u in all_users])
+        st.dataframe(users_df, use_container_width=True, hide_index=True)
+
+    # ── Tab2: 系统资源与大模型监控 ────────────────────────────────
+    with tab_monitor:
+        ts = get_token_stats()
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("本月累计 Token 消耗", f"{ts['total_tokens']:,}")
+        m2.metric("今日 Token 消耗",      f"{ts['today_tokens']:,}")
+        m3.metric("人均单次消耗",          f"{ts['avg_per_session']:,}")
+        m4.metric("本月预估费用(CNY)",      f"¥ {ts['cost_cny']}")
+
+        st.divider()
+
+        cl, cr = st.columns([1, 1])
+        with cl:
+            st.subheader("各部门算力资源占用")
+            st.dataframe(get_dept_token_usage(), use_container_width=True, hide_index=True)
+
+        with cr:
+            st.subheader("API 接口健康度")
+            health_df = get_api_health()
+            # 对状态列着色提示
+            st.dataframe(health_df, use_container_width=True, hide_index=True)
+            watching = health_df[health_df["状态"] == "观察中"]
+            if not watching.empty:
+                st.warning(f"以下接口可用率低于 98%，建议关注：{', '.join(watching['接口名称'].tolist())}")
+            else:
+                st.success("所有接口运行正常。")
+
+        st.divider()
+        st.subheader("大模型配置")
+        ark_key   = os.getenv("ARK_API_KEY", "")
+        ark_model = os.getenv("ARK_MODEL", "未配置")
+        ark_url   = os.getenv("ARK_BASE_URL", "未配置")
+        cfg_data = pd.DataFrame([
+            {"配置项": "API Key 状态",  "当前值": "已配置" if ark_key else "未配置（Mock 模式运行中）"},
+            {"配置项": "模型 ID",        "当前值": ark_model},
+            {"配置项": "API Base URL",  "当前值": ark_url},
+        ])
+        st.dataframe(cfg_data, use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════
 # 共用报告渲染
 # ══════════════════════════════════════════════════════════════════
 def _render_report(report: dict):
@@ -942,28 +1526,37 @@ def _render_report(report: dict):
 # 主路由
 # ══════════════════════════════════════════════════════════════════
 def main():
+    if not st.session_state.authenticated:
+        page_login()
+        return
+
     render_sidebar()
     page = st.session_state.page
 
-    if not st.session_state.authenticated and page != "login":
-        page = "login"
+    # Full-page bypasses — render without view wrapper
+    if page == "training":
+        page_training()
+        return
+    if page == "report":
+        page_report()
+        return
+    if page == "history_report":
+        page_history_report()
+        return
 
-    dispatch = {
-        "login":          page_login,
-        "home":           page_home,
-        "scene_select":   page_scene_select,
-        "training":       page_training,
-        "report":         page_report,
-        "scenarios":      page_scenarios,
-        "history":        page_history,
-        "history_report": page_history_report,
-        "user_mgmt":      page_user_mgmt,
+    # View-based routing via sidebar selectbox
+    view = st.session_state.get("platform_view", "员工虚拟实训端")
+    VIEW_MAP = {
+        "员工虚拟实训端":    view_employee,
+        "普通部门主管端":    view_dept_manager,
+        "HR全局培训管理端": view_hr_admin,
+        "系统超管端":        view_super_admin,
     }
-    fn = dispatch.get(page)
+    fn = VIEW_MAP.get(view)
     if fn:
         fn()
     else:
-        nav_to("home"); st.rerun()
+        view_employee()
 
 
 if __name__ == "__main__":
