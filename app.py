@@ -56,17 +56,31 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+/* ── 场景卡片 ── */
 .scenario-card {
-    background: linear-gradient(135deg,#1E293B 0%,#0F172A 100%);
-    border: 1px solid #334155;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
     border-radius: 10px;
     padding: 18px;
     margin-bottom: 10px;
-    transition: border-color .2s;
+    transition: border-color .2s, box-shadow .2s;
 }
-.scenario-card:hover { border-color: #4F46E5; }
+.scenario-card:hover { border-color: #4F46E5; box-shadow: 0 2px 8px rgba(79,70,229,0.12); }
+
+/* ── 页面标题 ── */
 .page-title   { font-size:1.7em; font-weight:700; margin-bottom:2px; }
-.page-subtitle{ color:#94A3B8; margin-bottom:20px; }
+.page-subtitle{ color:#64748B; margin-bottom:20px; }
+
+/* ── 训练室：白底覆盖 ── */
+section[data-testid="stChatMessageContent"] {
+    background: #F8FAFC !important;
+}
+div[data-testid="stChatMessage"] {
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 10px !important;
+    margin-bottom: 6px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -145,11 +159,11 @@ def create_radar_chart(capabilities: dict):
     ))
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(visible=True, range=[0, 10], tickfont=dict(size=10), gridcolor="#334155"),
-            angularaxis=dict(tickfont=dict(size=11), gridcolor="#334155"),
-            bgcolor="#0F172A",
+            radialaxis=dict(visible=True, range=[0, 10], tickfont=dict(size=10), gridcolor="#CBD5E1"),
+            angularaxis=dict(tickfont=dict(size=11), gridcolor="#CBD5E1"),
+            bgcolor="#F8FAFC",
         ),
-        paper_bgcolor="#0F172A", plot_bgcolor="#0F172A",
+        paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         showlegend=False, margin=dict(l=40,r=40,t=30,b=30), height=340,
     )
     return fig
@@ -243,8 +257,8 @@ def page_login():
         st.divider()
 
         with st.form("login_form"):
-            username = st.text_input("用户名", placeholder="alice / bob / carol / admin")
-            password = st.text_input("密码", type="password", placeholder="用户名 + 3位数字，如 alice123")
+            username = st.text_input("用户名")
+            password = st.text_input("密码", type="password")
             submitted = st.form_submit_button("登录", use_container_width=True, type="primary")
 
         if submitted:
@@ -258,21 +272,20 @@ def page_login():
                 st.error("用户名或密码错误")
 
         st.divider()
-        st.caption("**Demo 账号**")
-        for acc, desc in {
-            "alice / alice123": "HR部门 · 管理者",
-            "bob / bob123":     "销售部门 · 学员",
-            "carol / carol123": "技术部门 · 学员",
-            "admin / admin123": "管理层 · 超级管理员",
-        }.items():
-            st.caption(f"　`{acc}` — {desc}")
+        st.caption("**演示账号（密码均为 0000）**")
+        demo_accounts = [
+            ("staff",   "员工虚拟实训端",     "张员工  ·  销售部门"),
+            ("deptmgr", "部门主管端",         "李主管  ·  HR部门"),
+            ("hradmin", "HR全局培训管理端",   "王HR  ·  HR部门"),
+            ("admin",   "系统超管端",         "Admin  ·  管理层"),
+        ]
+        for uname, view, desc in demo_accounts:
+            st.caption(f"　`{uname}` / `0000` — {view} — {desc}")
 
         st.divider()
         if get_api_key():
             model = os.getenv("ARK_MODEL", "未配置")
-            st.success(f"火山引擎 API 已就绪 | 模型：{model}")
-        else:
-            st.info("Mock 演示模式（预设剧本，无需 API Key）")
+            st.success(f"火山引擎 API 已就绪 · 模型：{model}")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -418,9 +431,6 @@ def page_training():
     h3.metric("难度", sc.get("difficulty", "—"))
     if h4.button("结束训练", type="secondary"):
         _finish_training(); return
-
-    if session.is_mock:
-        st.info("Mock 演示模式 — 使用预设剧本展示完整训练流程。配置 ARK_API_KEY 后重启即切换至真实 AI。")
 
     st.divider()
 
@@ -783,7 +793,7 @@ def page_history():
             fig_trend.update_layout(
                 xaxis_title="训练日期", yaxis_title="得分",
                 yaxis=dict(range=[0, 10]),
-                paper_bgcolor="#0F172A", plot_bgcolor="#0F172A",
+                paper_bgcolor="#FFFFFF", plot_bgcolor="#F8FAFC",
                 height=280,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02),
             )
