@@ -100,6 +100,7 @@ def init_session():
         "training_report":        None,
         "input_mode":             "text",
         "viewing_history_report": None,
+        "coach_qa":               [],     # [{q, a}] 员工向教练直接提问的记录
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -139,6 +140,7 @@ def start_training(scenario: dict):
     st.session_state.current_scenario = scenario
     st.session_state.chat_history = []
     st.session_state.coach_feedbacks = []
+    st.session_state.coach_qa = []
     st.session_state.training_finished = False
     st.session_state.training_report = None
     st.session_state.input_mode = "code" if scenario.get("supports_code") else "text"
@@ -482,8 +484,8 @@ def page_training():
                 _handle_user_input(user_input)
 
     with coach_col:
+        # ── 教练实时反馈 ──────────────────────────────────────────
         st.markdown("**教练实时反馈**")
-        # 只显示评估维度名（自定义场景维度可能很长，截断显示）
         rule_display = " / ".join(r[:8] for r in sc["evaluation_rules"])
         st.caption(f"评估维度：{rule_display}")
 
@@ -496,6 +498,29 @@ def page_training():
                 label = f"第 {fb['round']} 轮反馈" + ("  ← 最新" if is_latest else "")
                 with st.expander(label, expanded=is_latest):
                     st.markdown(fb["content"])
+
+        # ── 问教练 ────────────────────────────────────────────────
+        st.divider()
+        st.markdown("**问教练**")
+        st.caption("随时向教练提问，获取针对性指导")
+
+        # 历史问答
+        for qa in st.session_state.coach_qa:
+            with st.chat_message("user"):
+                st.markdown(qa["q"])
+            with st.chat_message("assistant", avatar="🎓"):
+                st.markdown(qa["a"])
+
+        # 输入框
+        coach_q = st.chat_input("向教练提问...", key="coach_question_input")
+        if coach_q:
+            with st.spinner("教练思考中..."):
+                try:
+                    answer = session.ask_coach(coach_q)
+                except Exception as e:
+                    answer = f"（教练回复失败：{e}）"
+            st.session_state.coach_qa.append({"q": coach_q, "a": answer})
+            st.rerun()
 
         st.divider()
         st.caption("每轮对话后教练自动点评")
@@ -1475,7 +1500,6 @@ def view_super_admin():
     from utils.db import db_get_all_users, db_update_user
 
     st.markdown('<div class="page-title">系统超管端</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">部门架构  ·  权限分配  ·  资源与模型监控</div>', unsafe_allow_html=True)
 
     from utils.db import db_create_user, db_delete_user
     DEPT_LIST   = ["HR部门", "销售部门", "技术部门", "客服部门", "财务部门", "运营部门", "管理层", "其他"]
