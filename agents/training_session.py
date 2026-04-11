@@ -139,6 +139,31 @@ class TrainingSession:
         except Exception as e:
             return f"报告生成失败：{e}"
 
+    def ask_coach(self, question: str) -> str:
+        """
+        员工直接向教练提问。
+        教练会结合当前场景信息和已发生的对话来回答。
+        """
+        conv_lines = []
+        for turn in self.conversation_history[-10:]:
+            label = "学员" if turn["role"] == "user" else "角色"
+            conv_lines.append(f"{label}：{turn['content']}")
+        context_str = "\n".join(conv_lines) if conv_lines else "（训练尚未开始）"
+        eval_rules = "、".join(self.scenario["evaluation_rules"])
+
+        prompt = (
+            f"训练场景：{self.scenario['name']}\n"
+            f"评估维度：{eval_rules}\n\n"
+            f"当前训练进度（最近对话）：\n{context_str}\n\n"
+            f"学员向你提问：{question}\n\n"
+            "请以教练身份直接回答学员的问题，给出具体、实用的指导建议。"
+        )
+        return self._chat(
+            system=self.scenario["coach_system_prompt"],
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600,
+        )
+
     # ══════════════════════════════════════════════════════════════
     # 通用工具
     # ══════════════════════════════════════════════════════════════
