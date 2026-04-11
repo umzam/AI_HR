@@ -66,6 +66,11 @@ st.markdown("""
     transition: border-color .2s, box-shadow .2s;
 }
 .scenario-card:hover { border-color: #4F46E5; box-shadow: 0 2px 8px rgba(79,70,229,0.12); }
+.scenario-card.done {
+    border: 1.5px solid #22C55E;
+    background: #F0FDF4;
+}
+.scenario-card.done:hover { border-color: #16A34A; box-shadow: 0 2px 8px rgba(34,197,94,0.15); }
 
 /* ── 页面标题 ── */
 .page-title   { font-size:1.7em; font-weight:700; margin-bottom:2px; }
@@ -598,10 +603,12 @@ def page_report():
     sc = st.session_state.current_scenario
     if b1.button("再次训练同一场景", use_container_width=True):
         if sc: start_training(sc); st.rerun()
-    if b2.button("回到首页", use_container_width=True, type="primary"):
-        nav_to("home"); st.rerun()
+    if b2.button("返回实训大厅", use_container_width=True, type="primary"):
+        st.session_state.nav_page = "emp_hall"
+        nav_to("main"); st.rerun()
     if b3.button("查看训练历史", use_container_width=True):
-        nav_to("history"); st.rerun()
+        st.session_state.nav_page = "emp_history"
+        nav_to("main"); st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1065,21 +1072,44 @@ def view_employee():
         if not scenarios:
             st.info("暂无推荐实训场景，请联系管理员创建。")
         else:
+            # 按 scenario_id 建立最近一次训练记录的索引
+            last_by_sc = {}
+            for s in sessions:
+                sid = s.get("scenario_id")
+                if sid and (sid not in last_by_sc or s["date"] > last_by_sc[sid]["date"]):
+                    last_by_sc[sid] = s
+
             for i in range(0, len(scenarios), 3):
                 cols = st.columns(3)
                 for j, sc in enumerate(scenarios[i:i+3]):
                     with cols[j]:
+                        last = last_by_sc.get(sc["id"])
+                        done = last is not None
+                        card_class = "scenario-card done" if done else "scenario-card"
+
                         rule_scores = "  /  ".join(
                             f"{r}: {caps.get(r, '—')}" for r in sc["evaluation_rules"]
                         )
+                        # 完成状态行
+                        if done:
+                            status_html = (
+                                f'<div style="font-size:0.78em;color:#16A34A;margin-top:8px;font-weight:600">'
+                                f'已完成  ·  上次得分 {last.get("overall_score","—")}/10  ·  {last["date"]}'
+                                f'</div>'
+                            )
+                        else:
+                            status_html = '<div style="font-size:0.78em;color:#94A3B8;margin-top:8px">未练习</div>'
+
                         st.markdown(f"""
-<div class="scenario-card">
+<div class="{card_class}">
     <div style="font-weight:700;font-size:1.05em;margin-bottom:4px">{sc['name']}</div>
-    <div style="color:#94A3B8;font-size:0.82em">{sc['department']}  ·  {sc.get('difficulty','中级')}  ·  {sc['estimated_time']}</div>
+    <div style="color:#64748B;font-size:0.82em">{sc['department']}  ·  {sc.get('difficulty','中级')}  ·  {sc['estimated_time']}</div>
     <div style="color:#64748B;font-size:0.78em;margin-top:6px">{sc['description'][:55]}...</div>
-    <div style="font-size:0.76em;color:#818CF8;margin-top:8px">{rule_scores}</div>
+    <div style="font-size:0.76em;color:#818CF8;margin-top:6px">{rule_scores}</div>
+    {status_html}
 </div>""", unsafe_allow_html=True)
-                        if st.button("进入实训", key=f"emp_start_{sc['id']}", use_container_width=True, type="primary"):
+                        btn_label = "再次实训" if done else "进入实训"
+                        if st.button(btn_label, key=f"emp_start_{sc['id']}", use_container_width=True, type="primary"):
                             start_training(sc)
                             st.rerun()
 
