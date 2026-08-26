@@ -1,0 +1,64 @@
+{
+  "demo_employee": {
+    "username": "demo_employee",
+    "password": "demo123",
+    "name": "Demo Employee",
+    "department": "销售部门",
+    "role": "learner",
+    "avatar": "👤",
+    "capabilities": {
+      "需求挖掘": 5.0,
+      "方案匹配": 5.0,
+      "价值传递": 5.0
+    },
+    "training_sessions": []
+  },
+  "demo_manager": {
+    "username": "demo_manager",
+    "password": "demo123",
+    "name": "Demo Manager",
+    "department": "HR部门",
+    "role": "manager",
+    "avatar": "👤",
+    "capabilities": {
+      "沟通共情": 5.0,
+      "问题处理": 5.0,
+      "政策掌握": 5.0
+    },
+    "training_sessions": []
+  },
+  "demo_hr": {
+    "username": "demo_hr",
+    "password": "demo123",
+    "name": "Demo HR",
+    "department": "HR部门",
+    "role": "hr",
+    "avatar": "👤",
+    "capabilities": {
+      "沟通共情": 5.0,
+      "问题处理": 5.0,
+      "政策掌握": 5.0
+    },
+    "training_sessions": []
+  },
+  "demo_admin": {
+    "username": "demo_admin",
+    "password": "demo123",
+    "name": "Demo Admin",
+    "department": "管理层",
+    "role": "admin",
+    "avatar": "👤",
+    "capabilities": {
+      "沟通共情": 5.0,
+      "问题处理": 5.0,
+      "政策掌握": 5.0,
+      "需求挖掘": 5.0,
+      "方案匹配": 5.0,
+      "价值传递": 5.0,
+      "问题定位": 5.0,
+      "逻辑排查": 5.0,
+      "解决方案": 5.0
+    },
+    "training_sessions": []
+  }
+}
