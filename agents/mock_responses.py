@@ -1,12 +1,13 @@
 """
-mock_responses.py — 无API模式下的预设剧本
+mock_responses.py — synthetic response fixtures（当前未接入训练主流程）
 
 每个内置场景都有：
   - 角色 Agent 的多轮预设回应（按轮次循环）
   - 教练 Agent 的多轮预设反馈（按轮次循环）
   - 训练结束后的完整报告模板
 
-用途：Demo演示、无API环境下跑通完整流程。
+用途：保留早期 prototype 的 synthetic 文案与报告格式参考。当前
+`TrainingSession` 不调用本文件，因此它不构成完整离线 Mock 训练能力。
 """
 
 # ══════════════════════════════════════════════════════════════════

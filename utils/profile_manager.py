@@ -1,7 +1,7 @@
 """
 profile_manager.py — 用户能力画像管理
 
-所有数据读写已切换至 SQLite（utils/db.py），JSON 文件仅保留为备份。
+所有运行时数据读写使用 SQLite（utils/db.py）；JSON 文件只提供 synthetic 初始 seed。
 对外接口保持不变，app.py 无需感知底层存储细节。
 """
 

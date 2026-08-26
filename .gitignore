@@ -1,0 +1,30 @@
+# Environment and credentials
+.env
+.env.*
+!.env.example
+
+# Local AI/tool configuration
+.claude/
+
+# Runtime databases and state
+*.db
+*.db-shm
+*.db-wal
+data/runtime/
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log

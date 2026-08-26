@@ -1,124 +1,149 @@
-# AI-HR 解决方案与产品设计文档
+# AI Multi-Agent Virtual Training Platform — Product Design Document
 
-**项目名称**：全公司级多 Agent 虚拟实训 PaaS 平台  
-**文档版本**：v1.0  
-**日期**：2026-04-11
+**Artifact type:** AI product prototype / concept validation
 
----
+**Document version:** v1.1
 
-## ① 问题诊断
+**Original prototype date:** 2026-04-11
 
-**核心背景**：AI 工具的规模渗透正在系统性替代初级执行岗（客服、销售助理、初级 HR、运维 L1），企业人才梯队出现结构性断层——新员工跳过"学徒期"直接承接复杂任务，却缺乏经验积累路径。
+> Truthfulness boundary: implemented behavior is separated from assumptions and targets. No business-impact number in this document is a validated production result.
 
-三个核心痛点：
+## 1. Problem framing
 
-| 痛点 | 传统现状 | 量化损失 |
-|------|---------|---------|
-| 隐性知识无法传递 | 老带新口传心授，带教人离职即断档 | 关键岗位人均培养周期 6-12 个月 |
-| 试错成本极高 | 新人用真实客户练手，差评/客诉直接影响营收 | 销售新人首年签单率低于老员工 60% |
-| 梯队培养无法量化 | 缺乏能力模型，晋升评估主观 | 部门主管 70% 时间用于非结构化辅导 |
+The concept explores whether repeatable AI role-play can complement manual enterprise training for communication, sales, HR, service, and technical troubleshooting scenarios.
 
----
+### Design assumptions — not validated facts
 
-## ② 方案设计
+The following numbers were used to make the initial product problem concrete. This project has not independently validated them:
 
-**核心架构**：PaaS 底层 + 部门自定义层 + 多 Agent 协同层，三层解耦。
+| Design assumption | Initial planning value |
+|---|---|
+| Time for a new employee to become independently capable in a complex role | 6–12 months |
+| First-year sales performance relative to an experienced employee | below 60% |
+| Manager time spent on unstructured coaching | 70% |
 
-```
-┌──────────────────────────────────────────────────────┐
-│                   前端展示层（Streamlit）              │
-│  员工端 / 部门主管端 / HR管理端 / 超管端（RBAC 路由）  │
-├──────────────────────────────────────────────────────┤
-│                   业务逻辑层                           │
-│  场景引擎          能力模型         训练报告           │
-│  ScenarioEngine    CapabilityGraph  ReportTracker     │
-├──────────────────────────────────────────────────────┤
-│                   多 Agent 协同层                      │
-│  Role Agent  ←→  Coach Agent  ←→  Tracking Agent     │
-│  （角色扮演）    （实时教练）     （追踪评估）         │
-│  + Scenario Architect Agent（AI 自动建模）            │
-├──────────────────────────────────────────────────────┤
-│                   数据持久层（SQLite）                  │
-│  users / capabilities / training_sessions /           │
-│  session_scores / custom_scenarios                    │
-└──────────────────────────────────────────────────────┘
+These values must not be presented as observed customer data, market research findings, or results of this prototype.
+
+## 2. Product concept
+
+The prototype combines four explicit LLM roles with role-based product views:
+
+```text
+Streamlit UI
+├── Learner / Manager / HR / Admin views
+├── Training flow
+│   ├── Role call
+│   ├── Coach call
+│   └── Tracking call
+├── Scenario Architect call or static example fallback
+└── SQLite local persistence
 ```
 
-**三个内置场景**（覆盖核心业务线）：
-- `hr_salary_negotiation`：HR 薪资谈判（沟通共情 / 问题处理 / 政策掌握）
-- `sales_price_negotiation`：销售价格谈判（需求挖掘 / 方案匹配 / 价值传递）
-- `tech_mysql_troubleshoot`：MySQL 线上故障排查（问题定位 / 逻辑排查 / 解决方案）
+The Role, Coach, and Tracking calls are sequentially orchestrated by application code. Scenario Architect is invoked separately when creating a scenario. This is not autonomous agent planning or self-organizing multi-agent collaboration.
 
-**差异化设计**：部门主管和 HR 管理员可通过 Scenario Architect Agent 自动生成新场景，填入岗位名称即可 AI 建模，生成角色背景、考核维度、对抗性剧本，30 秒完成场景上线。
+## 3. Intended agent responsibilities
 
----
+| Role | Responsibility | Current implementation |
+|---|---|---|
+| Role | Simulate the scenario character and maintain the dialogue | Stateful message history and one LLM call per turn |
+| Coach | Give focused feedback on the latest turn | Stateless LLM call with recent context |
+| Tracking | Generate the final report and scores | End-of-session LLM call plus JSON score parsing |
+| Scenario Architect | Draft a scenario configuration | LLM call with structured parsing; static example fallback when unavailable |
 
-## ③ AI 工具选择的理由
+## 4. Implemented prototype scope
 
-| 技术选型 | 选择理由 |
-|---------|---------|
-| **Streamlit** | 纯 Python 全栈，前后端零割裂；`st.chat_input` / `st.chat_message` 原生支持对话 UI；`session_state` 统一管理多 Agent 状态机，开发周期压缩至 1/5 |
-| **火山引擎 + OpenAI SDK** | OpenAI 兼容协议，无需改造调用层；国内低延迟；仅需替换 `base_url` 即可接入任意兼容模型，供应商解耦 |
-| **多 Agent 手动编排**（非 AutoGen） | Python 3.9 兼容性约束下，放弃 AutoGen 0.4；手动维护 `role_messages` 列表实现 Role Agent 多轮记忆，`coach_system_prompt` 无状态调用保证教练客观性，逻辑完全透明可控 |
-| **SQLite + WAL 模式** | 零依赖部署，WAL 模式支持并发读写；外键级联删除保证数据一致性；能力分数使用加权移动平均（0.7 × 历史 + 0.3 × 本次）防止单次训练剧烈波动 |
+- Streamlit interface and four role-oriented views.
+- Built-in HR, sales, customer-recovery, and technical scenarios.
+- Role-play, per-turn coaching, final report, and score extraction.
+- Scenario creation and editing.
+- SQLite user, capability, session, score, and custom-scenario tables.
+- Synthetic seed accounts and synthetic dashboard statistics.
+- Environment-based OpenAI-compatible API configuration.
 
----
+Not implemented or not demonstrated:
 
-## ④ 关键配置
+- enterprise multi-tenancy;
+- production identity, encryption, audit, or authorization controls;
+- production reliability and monitoring;
+- calibrated evaluation against human expert scoring;
+- real-user or organizational impact validation.
 
-**模型调用参数**：
+## 5. Technical design choices
 
-```python
-Role Agent    max_tokens = 512   # 控制角色回复长度，避免脱戏
-Coach Agent   max_tokens = 600   # 教练反馈精炼，突出重点
-Report Agent  max_tokens = 2000  # 报告完整覆盖全部维度
-Ask Coach     max_tokens = 600   # 直接问答，结合最近 10 条上下文
+| Choice | Prototype rationale | Evidence status |
+|---|---|---|
+| Streamlit | Fast implementation of chat and role-based views in Python | Implemented in code |
+| OpenAI-compatible SDK | Keeps the call layer compatible with the configured endpoint | Implemented in code |
+| Explicit orchestration | Makes the order and context passed to each LLM role visible | Implemented in code |
+| SQLite + WAL | Low-dependency local persistence for a demo | Implemented; production concurrency not validated |
+| Weighted capability update | `new = 0.7 × previous + 0.3 × session` | Implemented product rule; effectiveness not validated |
+
+### Implemented model-call settings
+
+These are configuration values visible in the current code, not performance claims:
+
+```text
+Role       max_tokens = 512
+Coach      max_tokens = 600
+Tracking   max_tokens = 2000
+Ask Coach  max_tokens = 600
 ```
 
-> `temperature` 未显式设置，使用模型默认值（通常 0.7~1.0），保留角色扮演多样性；教练和报告场景通过 Prompt 约束格式输出，抵消随机性影响。
+Prompts constrain role and output format, but they should not be described as a complete prompt-injection, jailbreak, or hallucination defense.
 
-**Prompt 防越狱 / 防幻觉规则**（内嵌于系统提示词）：
-- Role Agent：**"不得主动泄露评分标准，不得跳出角色身份"**，对抗性角色设定硬性边界（如政策红线不可逾越）
-- Coach Agent：**"必须基于本轮实际对话内容点评，不得泛泛而谈"**，输出格式锁定为「亮点 / 建议 / 示范话术」
-- Tracking Agent：**"输出必须包含 JSON 评分块"**，`_extract_scores()` 正则兜底防止报告结构破坏
+## 6. Iteration record
 
-**能力分数更新公式**：
-```
-new_score = 0.7 × old_score + 0.3 × session_score
-```
+| Version | Prototype change | Evidence type |
+|---|---|---|
+| v0.1 | Single-page Streamlit flow and scripted examples | Implemented iteration |
+| v0.2 | OpenAI-compatible model calls | Implemented iteration |
+| v0.3 | SQLite persistence | Implemented iteration |
+| v0.4 | Scenario selection and training history | Implemented iteration |
+| v0.5 | Learner / Manager / HR / Admin views | Implemented iteration |
+| v0.6 | Scenario Architect | Implemented; “30-second scenario launch” remains a Target Metric, not a validated result |
+| v0.7 | Ask Coach interaction | Implemented iteration |
+| v0.8 | Light UI and synthetic demo accounts | Implemented iteration |
 
----
+## 7. Evaluation Plan / Target Metrics
 
-## ⑤ 迭代优化记录
+These values describe what a future validation could measure. No baseline or target below has been validated by production data.
 
-| 版本 | 核心变更 | 解决的问题 |
-|------|---------|-----------|
-| **v0.1** | 单页 Streamlit + 硬编码剧本 | 跑通基础对话链路 |
-| **v0.2** | 接入火山引擎 API，替换 Mock 模式 | 真实 AI 对话，去除预设剧本依赖 |
-| **v0.3** | 引入 SQLite，替换 JSON 文件存储 | 解决并发写冲突，支持能力分数持久化 |
-| **v0.4** | 场景选择页 + 训练历史展开评分 | 员工端体验完整闭环 |
-| **v0.5** | RBAC 四视图重构（员工/主管/HR/超管） | 角色权限隔离，侧边栏按钮导航替换下拉 |
-| **v0.6** | Scenario Architect Agent | AI 30 秒自动建模，部门主管无需技术背景即可上线新场景 |
-| **v0.7** | 教练直接问答（Ask Coach）| 员工训练中随时提问，教练结合当前上下文实时指导 |
-| **v0.8** | 白底 UI + 演示账号体系 | 去除暗色主题，4 账号覆盖 4 角色，Demo 即开即用 |
+| Classification | Metric | Planning baseline | Target | Proposed measurement |
+|---|---|---:|---:|---|
+| Target Metric | Learning-to-work transfer after at least three sessions | 35% | 65% | Manager assessment within 90 days |
+| Target Metric | Time to independently handle complex work | 180 days | under 90 days | Quarterly cohort comparison |
+| Target Metric | Share of senior staff time spent on unstructured coaching | 70% | under 30% | Monthly time study |
+| Target Metric | Scenario draft creation time | not measured | 30 seconds | Timed task from job selection to editable draft |
 
----
+Required future validation would need a defined cohort, comparison method, evaluator calibration, data consent, and explicit measurement period.
 
-## ⑥ 效果评估
+## 8. Value Hypotheses
 
-**北极星指标与预期收益**：
+The following are product hypotheses, not achieved outcomes:
 
-| 指标 | 定义 | 基线 | 目标 | 衡量周期 |
-|------|------|------|------|---------|
-| **学用转化率** | 完成 ≥3 次实训后，实际业务场景应用率（主管评估） | 35% | **65%** | 入职后 90 天 |
-| **初级干部胜任周期** | 从入职到独立承接复杂任务的平均天数 | 180 天 | **＜90 天** | 季度统计 |
-| **带教成本下降率** | 高级员工用于非结构化辅导的时间占比 | 70% | **＜30%** | 月度 OKR |
+- **4 hours per person per month saved:** hypothesis that structured reports could reduce manual HRBP reporting time.
+- **Development cycle compressed to one fifth:** initial implementation hypothesis for choosing Streamlit; no controlled comparison was performed.
+- **Marginal cost approaches zero for a new department:** directional hypothesis about scenario reuse, not an economic result. Real onboarding, review, governance, and model costs remain.
+- **Reusable scenario library:** hypothesis that reviewed scenarios can reduce repeated setup work.
+- **More consistent capability evidence:** hypothesis that structured sessions can complement, not replace, human evaluation.
 
-**附加收益**：
-- 能力画像数据沉淀 → 晋升/轮岗决策有据可查，减少主观评价争议
-- 场景库复用 → 新部门接入边际成本趋近于零
-- 训练报告结构化 → 直接输出 HRBP 所需的人才发展报告，节省约 4 小时/人/月
+## 9. Validation status
 
----
+Validated at code/prototype level:
 
-*本文档由 AI 产品架构师基于实际代码生成，技术参数均来源于生产代码，非估算值。*
+- the application routes among the four views;
+- the LLM roles are explicitly orchestrated;
+- session results can be parsed and stored;
+- custom scenarios and local users can be managed;
+- Python modules compile successfully.
+
+Not validated:
+
+- learning effectiveness;
+- score validity or fairness;
+- business impact;
+- production reliability;
+- enterprise adoption;
+- any numeric assumption, target, or value hypothesis above.
+
+This document describes an AI product prototype and an evaluation plan. It does not claim production deployment or validated business results.

@@ -395,38 +395,38 @@ DEPARTMENT_SCENARIO_MAP = {
     "管理层":   list(BUILTIN_SCENARIOS.keys()),  # 管理员可访问所有场景
 }
 
-# ── Demo用户列表（密码明文，仅Demo用，生产环境需加密） ──────────
+# ── Synthetic demo-only users（明文密码；不得用于生产环境） ─────
 DEMO_USERS = [
     {
-        "username": "alice",
-        "password": "alice123",
-        "name": "Alice Wang",
-        "department": "HR部门",
-        "role": "manager",   # manager 可创建自定义场景
-        "avatar": "👩‍💼",
-    },
-    {
-        "username": "bob",
-        "password": "bob123",
-        "name": "Bob Chen",
+        "username": "demo_employee",
+        "password": "demo123",
+        "name": "Demo Employee",
         "department": "销售部门",
         "role": "learner",
-        "avatar": "👨‍💼",
+        "avatar": "👤",
     },
     {
-        "username": "carol",
-        "password": "carol123",
-        "name": "Carol Li",
-        "department": "技术部门",
-        "role": "learner",
-        "avatar": "👩‍💻",
+        "username": "demo_manager",
+        "password": "demo123",
+        "name": "Demo Manager",
+        "department": "HR部门",
+        "role": "manager",
+        "avatar": "👤",
     },
     {
-        "username": "admin",
-        "password": "admin123",
-        "name": "Admin Zhang",
+        "username": "demo_hr",
+        "password": "demo123",
+        "name": "Demo HR",
+        "department": "HR部门",
+        "role": "hr",
+        "avatar": "👤",
+    },
+    {
+        "username": "demo_admin",
+        "password": "demo123",
+        "name": "Demo Admin",
         "department": "管理层",
         "role": "admin",
-        "avatar": "👑",
+        "avatar": "👤",
     },
 ]

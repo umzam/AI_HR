@@ -279,12 +279,12 @@ def page_login():
                 st.error("用户名或密码错误")
 
         st.divider()
-        st.caption("**演示账号（密码均为 0000）**")
+        st.caption("**Demo-only credentials（密码均为 demo123）**")
         demo_accounts = [
-            ("staff",   "员工虚拟实训端",     "张员工  ·  销售部门"),
-            ("deptmgr", "部门主管端",         "李主管  ·  HR部门"),
-            ("hradmin", "HR全局培训管理端",   "王HR  ·  HR部门"),
-            ("admin",   "系统超管端",         "Admin  ·  管理层"),
+            ("demo_employee", "员工虚拟实训端",   "Synthetic employee · 销售部门"),
+            ("demo_manager",  "部门主管端",       "Synthetic manager · HR部门"),
+            ("demo_hr",       "HR全局培训管理端", "Synthetic HR · HR部门"),
+            ("demo_admin",    "系统超管端",       "Synthetic admin · 管理层"),
         ]
         for uname, view, desc in demo_accounts:
             st.caption(f"　`{uname}` / `0000` — {view} — {desc}")
@@ -293,6 +293,8 @@ def page_login():
         if get_api_key():
             model = os.getenv("ARK_MODEL", "未配置")
             st.success(f"火山引擎 API 已就绪 · 模型：{model}")
+        else:
+            st.warning("未配置 ARK_API_KEY：可浏览 Demo UI 和 synthetic seed，但 Role / Coach / Tracking 的交互训练需要有效 API 配置。")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -1237,6 +1239,7 @@ def view_dept_manager():
     if nav == "dm_board":
         st.markdown('<div class="page-title">部门看板</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="page-subtitle">{dept}  ·  仅显示本部门数据</div>', unsafe_allow_html=True)
+        st.info("Prototype note: dashboard metrics and people records on this page are synthetic demonstration data, not observed usage.")
 
         stats = get_dept_stats(dept)
         m1, m2, m3, m4 = st.columns(4)
@@ -1361,6 +1364,7 @@ def view_hr_admin():
     if nav == "hr_dashboard":
         st.markdown('<div class="page-title">全局运营数据看板</div>', unsafe_allow_html=True)
         st.markdown('<div class="page-subtitle">全平台实训运营数据总览</div>', unsafe_allow_html=True)
+        st.info("Prototype note: all dashboard metrics are deterministic synthetic data used to demonstrate the intended product view.")
 
         gs = get_global_stats()
         m1, m2, m3, m4 = st.columns(4)
@@ -1684,6 +1688,7 @@ def view_super_admin():
 
     # ── 系统资源监控 ──────────────────────────────────────────────
     elif nav == "sa_monitor":
+        st.info("Prototype note: token usage, API health, latency, and availability values are synthetic UI data, not production telemetry.")
         st.markdown('<div class="page-title">系统资源监控</div>', unsafe_allow_html=True)
         st.markdown('<div class="page-subtitle">Token 消耗  ·  API 健康度  ·  大模型配置</div>', unsafe_allow_html=True)
 
