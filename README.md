@@ -1,114 +1,109 @@
-# AI Multi-Agent Virtual Training Platform Prototype
+# AI 虚拟情境实训平台
 
-An AI product prototype for exploring role-play training, in-session coaching, structured evaluation, and AI-assisted scenario creation.
+> 基于多角色 LLM 工作流的企业培训产品原型
 
-This repository demonstrates a product concept and runnable Streamlit implementation. It is not a validated enterprise PaaS, a production deployment, or a high-autonomy multi-agent system.
+AI_HR 面向企业岗位情境训练，通过角色扮演、每轮反馈、训练总结与结果沉淀，构建可重复的练习闭环。当前为 **Portfolio / Product Prototype**。
 
-## Problem
+项目以短周期原型验证为目标，优先实现核心训练闭环和多角色 LLM 编排，暂未扩展生产级权限、稳定性与评测体系。
 
-Traditional role-play training is difficult to repeat consistently, expensive to facilitate manually, and hard to evaluate with a shared structure. This prototype explores whether explicit LLM roles can make practice scenarios easier to create, run, review, and iterate.
+## 为什么做
 
-## Product concept
+企业岗位培训中，常见的三个问题是：
 
-A learner enters a scenario, responds to a simulated role, receives coaching feedback, and ends the session with a structured report. Managers and HR-oriented views expose scenario configuration, user administration, synthetic capability views, and training history.
+- 新人缺少低风险、可重复的真实业务练习环境；
+- 人工带教依赖个人经验，反馈难以形成统一、结构化的沉淀；
+- 不同岗位的训练场景需要单独设计，制作和复用成本较高。
 
-## Agent roles
+## 产品方案
 
-- **Role** — responds as the scenario character and maintains the role-play conversation.
-- **Coach** — evaluates each turn and gives focused feedback.
-- **Tracking** — generates the end-of-session report and structured scores.
-- **Scenario Architect** — generates an editable scenario draft from a selected job type and department.
-
-These roles are explicitly and sequentially orchestrated in Python. They do not autonomously negotiate plans, delegate work, or form a self-organizing multi-agent system.
-
-## Main user flow
+产品围绕员工训练主链路展开：
 
 ```text
-Choose scenario
-→ Start role-play
-→ Learner response
-→ Role response
-→ Coach feedback
-→ Repeat
-→ End session
-→ Tracking report
-→ Save synthetic training record
+选择训练场景
+→ 与 Role 进行多轮对话
+→ Coach 在每轮结束后提供反馈
+→ 学员继续练习或结束训练
+→ Tracking 生成总结与结构化评分
+→ 保存训练历史和能力结果
 ```
 
-## What is implemented
+当前原型包含四类使用视角：
 
-- Streamlit interface with learner, department manager, HR, and admin views.
-- Built-in HR, sales, customer-recovery, and technical troubleshooting scenarios.
-- Sequential Role → Coach calls for each learner turn.
-- Tracking report generation with structured score extraction.
-- Scenario Architect with editable output and a static fallback for scenario drafting.
-- SQLite persistence for users, capability scores, sessions, and custom scenarios.
-- Training history, report viewing, scenario management, and user management.
-- Synthetic dashboards and operational views for demonstrating the broader product concept.
-- Environment-based configuration for an OpenAI-compatible model endpoint.
+- **员工端**：训练、即时反馈、报告与能力画像；
+- **部门主管端**：部门视图、场景创建与成员训练信息；
+- **HR 端**：场景管理、能力模型与全局运营视图；
+- **管理员端**：用户、部门角色与系统配置视图。
 
-## Running locally
+## 多角色 LLM 工作流
 
-Python 3.9+ is recommended.
+项目将训练任务拆成四个职责明确的 LLM 角色：
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-export ARK_API_KEY="your-key"
-export ARK_MODEL="your-model-id"
-./start.sh
-```
+| 角色 | 职责 | 拆分原因 |
+| --- | --- | --- |
+| **Role** | 扮演业务场景中的对话对象，并维护多轮对话 | 专注角色一致性和情境反应，避免评价逻辑干扰角色扮演 |
+| **Coach** | 根据近期上下文和本轮交互提供即时反馈 | 将过程辅导独立出来，让反馈更聚焦、可操作 |
+| **Tracking** | 在训练结束后读取完整对话，生成总结与结构化评分 | 将逐轮反馈与最终评价分离，统一完成复盘和结果提取 |
+| **Scenario Architect** | 根据岗位和部门生成可编辑的训练场景草稿 | 将场景创建从固定模板扩展为可配置的草稿生成流程 |
 
-`ARK_BASE_URL` defaults to the configured Volcengine-compatible endpoint and can be overridden with another compatible endpoint.
-
-Without `ARK_API_KEY` and `ARK_MODEL`, the Streamlit UI and synthetic seed data can still be inspected, and Scenario Architect can return a static example. The interactive Role / Coach / Tracking training flow requires a valid model configuration; this repository does not claim a complete offline Mock training mode.
-
-## Demo-only credentials
-
-The seed file contains four entirely synthetic local accounts:
-
-| Username | Password | View |
-|---|---|---|
-| `demo_employee` | `demo123` | Learner |
-| `demo_manager` | `demo123` | Department manager |
-| `demo_hr` | `demo123` | HR |
-| `demo_admin` | `demo123` | Admin |
-
-These are **demo-only credentials**. Authentication stores plaintext passwords in local SQLite for prototype convenience and is not suitable for production use.
-
-## Prototype architecture
+主训练流程由 Python 显式、顺序编排：
 
 ```text
-Streamlit UI
-├── Role-based views
-├── Training session orchestration
-│   ├── Role LLM call
-│   ├── Coach LLM call
-│   └── Tracking LLM call
-├── Scenario Architect LLM call / static fallback
-└── SQLite local persistence
+Learner → Role → Coach → Repeat → Tracking
 ```
 
-## Evaluation status
+这是一个**多角色 LLM 工作流 / 显式编排的 Agent Workflow**。当前没有自主规划、Agent 协商或动态任务分配机制。
 
-Business metrics in [Design_Document.md](Design_Document.md) are design assumptions, target metrics, or value hypotheses. They are not validated production outcomes.
+## 关键产品决策
 
-Current evidence demonstrates code-level prototype implementation only. It does not demonstrate production reliability, learning effectiveness, business ROI, or enterprise adoption.
+### 1. 将对话、反馈和评价拆成不同角色
 
-## Limitations
+Role 负责互动，Coach 负责过程辅导，Tracking 负责最终评价，避免单一 Prompt 同时承担角色扮演和评分任务。
 
-- Streamlit prototype rather than a production web application.
-- Local SQLite persistence; no multi-tenant data architecture.
-- Demo authentication with plaintext local passwords.
-- Interactive training depends on an externally configured LLM endpoint.
-- Sequential LLM-role orchestration, not high-autonomy multi-agent collaboration.
-- No production deployment or operational reliability evidence.
-- No real-user validation study.
-- No validated learning-impact or business-impact metrics.
-- Generated feedback and scores have not been calibrated against expert raters.
-- Synthetic dashboard statistics illustrate intended views and are not observed usage data.
+### 2. 使用显式顺序编排
 
-## Status
+训练节奏由应用代码控制，每轮执行 Role 回应和 Coach 反馈，结束后调用 Tracking，以保证流程可控、上下文清晰。
 
-Portfolio demo / concept validation prototype. The project is useful as evidence of AI product design and implementation, not as a claim of production readiness or validated enterprise impact.
+### 3. 场景先生成草稿，再由人确认
+
+Scenario Architect 生成场景名称、背景、角色设定与评估维度，使用者可检查、修改后再保存，保留 Human-in-the-loop。
+
+### 4. 将训练过程沉淀为结构化记录
+
+系统保存训练报告、维度分数和训练轮次，并基于历史结果更新能力画像，支持后续回顾与持续训练。
+
+## 已实现范围
+
+| 模块 | 当前状态 | 边界 |
+| --- | --- | --- |
+| 多轮角色训练 | 已实现 | 依赖外部 OpenAI-compatible LLM 配置 |
+| 每轮 Coach 反馈与问教练 | 已实现 | 反馈质量尚未经过专家校准 |
+| Tracking 总结与结构化评分 | 已实现 | 评分有效性和公平性尚未验证 |
+| 训练历史与能力结果 | 已实现 | 使用 SQLite 作为原型存储 |
+| Scenario Architect | 已实现 | 生成草稿后需要人工确认；无 API 时返回内置示例 |
+| 自定义场景管理 | 已实现 | 支持创建、保存和删除，暂不支持保存后编辑 |
+| 用户管理与角色视图 | 已实现 | 面向原型演示，不代表生产级权限体系 |
+| 管理端看板 | UI 原型 | 部门、运营和系统监控等部分数据为 synthetic |
+
+## 验证边界
+
+代码已实现从场景创建、角色训练、每轮反馈、训练总结到结果保存与展示的完整链路。
+
+当前尚未验证：
+
+- 产品对实际学习效果和工作表现的影响；
+- LLM 评分与培训专家评分的一致性；
+- 企业业务 ROI、生产稳定性和大规模使用表现。
+
+更完整的设计假设与后续验证计划见 [Design_Document.md](Design_Document.md)。
+
+## 技术实现
+
+- **应用与界面**：Python、Streamlit
+- **LLM 调用**：OpenAI-compatible API
+- **Agent Workflow**：Prompt-based Role / Coach / Tracking / Scenario Architect
+- **数据存储**：SQLite
+- **结果展示**：Plotly
+
+## 项目状态
+
+**Portfolio Prototype / Concept Validation**
